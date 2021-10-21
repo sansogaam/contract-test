@@ -1,0 +1,96 @@
+plugins {
+    id 'groovy'
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+    id 'org.springframework.cloud.contract'
+    id 'maven-publish'
+}
+
+group = 'com.jd.spring'
+version = '1.0.0-SNAPSHOT'
+sourceCompatibility = '1.8'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven { url "https://repo.spring.io/snapshot" }
+    maven { url "https://repo.spring.io/milestone" }
+    maven { url "https://repo.spring.io/release" }
+}
+
+ext {
+    set('springCloudVersion', "${BOM_VERSION}")
+    // Not necessary in Boot 2.6 - Boot 2.5 takes in json-path 2.5 that has a regression
+    set('json-path.version', '2.6.0')
+}
+
+println "Boot Version [${bootVersion}], Cloud version [${BOM_VERSION}], Contract version [${verifierVersion}]"
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation('com.jd.spring:get-employee-application:1.0.0-SNAPSHOT')
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.cloud:spring-cloud-starter-stream-rabbit")
+    testImplementation('org.springframework.boot:spring-boot-starter-test') {
+        exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+    }
+    //testCompile(group: 'junit', name: 'junit')
+    testImplementation(group: 'org.springframework.cloud', name: 'spring-cloud-stream', classifier: 'test-binder')
+    testImplementation('javax.inject:javax.inject:1')
+    testImplementation("org.springframework.cloud:spring-cloud-starter-contract-verifier")
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
+contracts {
+    testFramework = "JUNIT5"
+    baseClassForTests='com.jd.spring.cloud.contract.get.BaseClass'
+}
+
+contractTest {
+    useJUnitPlatform()
+    testLogging {
+        exceptionFormat = 'full'
+    }
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println "Results: (${result.testCount} tests, ${result.successfulTestCount} successes, ${result.failedTestCount} failures, ${result.skippedTestCount} skipped)"
+            boolean skipTests = Boolean.parseBoolean(project.findProperty('SKIP_TESTS') ?: "false")
+            if (result.testCount == 0 && !skipTests) {
+                throw new IllegalStateException("No tests were found. Failing the build")
+            }
+        }
+    }
+}
+bootJar {
+    enabled = false
+}
+
+jar {
+    enabled = true
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            //artifact bootJar
+
+            artifact verifierStubsJar
+
+            // https://github.com/spring-gradle-plugins/dependency-management-plugin/issues/273
+            versionMapping {
+                usage("java-api") {
+                    fromResolutionOf("runtimeClasspath")
+                }
+                usage("java-runtime") {
+                    fromResolutionResult()
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: spring-cloud-contract-get-employee-application
+  main:
+    allow-bean-definition-overriding: true
+server:
+  port: 8180
+  servlet:
+    context-path: /
